@@ -1,0 +1,151 @@
+{
+Example for KnobG Click
+
+    Date          : okt 2018.
+    Author        : Katarina Perendic
+
+Test configuration KINETIS :
+    
+    MCU              : MK64
+    Dev. Board       : HEXIWEAR
+    ARM Compiler ver : v6.0.0.0
+
+---
+
+Description :
+
+The application is composed of three sections :
+
+- System Initialization - Initializes I2C module, sets INT pin, AN pin and CS pin as INPUT and sets RST pin and PWM pin as OUTPUT
+- Application Initialization - Initialization driver init, reset device, enable led output, 
+                               set output gain on maximum and sets new start position of the encoder.
+- Application Task - (code snippet) - The Task application has 3 test modes:
+                                      * The first example is setting BRIGHTNESS on all LEDs.
+                                      * Other examples put the LED in the position read from the encoder.
+                                      * The third example sets the LED to be read while the encoder registers the clockwise movement
+                                      and turn off those LEDs that the encoder reads when moving in a counterclockwise direction.
+                                      * The example is changed by pressing the SW button
+}
+program Click_KnobG_KINETIS;
+
+uses Click_KnobG_types, Click_KnobG_config;
+
+var
+    encoder_newPosition : int32_t; 
+    encoder_oldPosition : int32_t; 
+    direction : uint8_t; 
+    demoText : array[100] of char; 
+    SW_State : uint8_t; 
+    cnt : uint8_t; 
+    
+procedure systemInit(); 
+begin
+    mikrobus_gpioInit(_MIKROBUS1, _MIKROBUS_INT_PIN, _GPIO_INPUT); 
+    mikrobus_gpioInit(_MIKROBUS1, _MIKROBUS_AN_PIN, _GPIO_INPUT); 
+    mikrobus_gpioInit(_MIKROBUS1, _MIKROBUS_CS_PIN, _GPIO_INPUT); 
+    mikrobus_gpioInit(_MIKROBUS1, _MIKROBUS_RST_PIN, _GPIO_OUTPUT); 
+    mikrobus_gpioInit(_MIKROBUS1, _MIKROBUS_PWM_PIN, _GPIO_OUTPUT); 
+    mikrobus_i2cInit(_MIKROBUS1, @_KNOBG_I2C_CFG[0]); 
+    mikrobus_logInit(_LOG_USBUART, 9600); 
+    mikrobus_logWrite('--- System Init ---', _LOG_LINE); 
+    Delay_ms(100); 
+end;
+
+procedure applicationInit(); 
+begin
+    knobg_i2cDriverInit(T_KNOBG_P(@_MIKROBUS1_GPIO), T_KNOBG_P(@_MIKROBUS1_I2C), _KNOBG_DEF_SLAVE_ADDRESS); 
+    knobg_reset(); 
+    Delay_ms(300); 
+    knobg_ledOutputEnable(_KNOBG_ENABLE_LED_OUTPUTS); 
+    knobg_setOutputGain(_KNOBG_OUTPUT_GAIN_ALL_LED, _KNOBG_FULL_OUTPUT_CURRENT_GAIN); 
+    knobg_encoderNewStartPosition(1); 
+end;
+
+procedure applicationTask(); 
+begin
+    knobg_getEncoderPosition(@encoder_newPosition, @direction); 
+    if (knobg_getSWButtonState() = 0) then 
+    begin
+        inc(SW_State);
+        if (SW_State >= 3) then 
+        begin
+            SW_State := 0; 
+        end; 
+        knobg_setBrightness(_KNOBG_BRIGHTNESS_ALL_LED, 0x00); 
+        Delay_ms(300); 
+    end; 
+    if (encoder_newPosition <> encoder_oldPosition) then 
+    begin
+        WordToStr(encoder_newPosition, demoText); 
+        mikrobus_logWrite(' EnCoder position : ', _LOG_TEXT); 
+        mikrobus_logWrite(demoText, _LOG_LINE); 
+    end; 
+    encoder_oldPosition := encoder_newPosition; 
+    case SW_State of
+        0 :
+        begin
+            inc(cnt);
+            if (cnt > 127) then 
+            begin
+                cnt := 0; 
+            end; 
+            knobg_setBrightness(_KNOBG_BRIGHTNESS_ALL_LED, cnt); 
+            Delay_ms(15); 
+        end;
+        1 :
+        begin
+            if (encoder_newPosition > 24) then 
+            begin
+                knobg_encoderNewStartPosition(1); 
+            end; 
+            if (encoder_newPosition < 1) then 
+            begin
+                knobg_encoderNewStartPosition(24); 
+            end; 
+            if (direction = 1) then 
+            begin
+                knobg_setLedState(encoder_newPosition, _KNOBG_LED_ON); 
+                knobg_setLedState(encoder_newPosition - 1, _KNOBG_LED_OFF); 
+            end
+            else 
+            begin
+                knobg_setLedState(encoder_newPosition, _KNOBG_LED_ON); 
+                knobg_setLedState(encoder_newPosition + 1, _KNOBG_LED_OFF); 
+            end;
+            Delay_1ms(); 
+        end;
+        2 :
+        begin
+            if (encoder_newPosition > 24) then 
+            begin
+                knobg_encoderNewStartPosition(1); 
+            end; 
+            if (encoder_newPosition < 1) then 
+            begin
+                knobg_encoderNewStartPosition(24); 
+            end; 
+            if (direction = 1) then 
+            begin
+                knobg_setLedState(encoder_newPosition, _KNOBG_LED_ON); 
+            end
+            else 
+            begin
+                knobg_setLedState(encoder_newPosition + 1, _KNOBG_LED_OFF); 
+            end;
+            Delay_1ms(); 
+        end;
+    end;
+end;
+
+begin
+    encoder_newPosition := 0;
+    encoder_oldPosition := 0;
+    SW_State := 0;
+
+    systemInit(); 
+    applicationInit(); 
+    while (1) do 
+    begin 
+        applicationTask(); 
+    end;
+end.

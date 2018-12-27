@@ -1,0 +1,18 @@
+main
+	__FillZeros
+	MCU_Init
+		I2C2_Init
+			SetI2C2Ptrs
+			Get_Fosc_kHz
+			I2C2_Wait_For_Idle
+				I2C2_Is_Idle
+	Rst_Chip
+		I2C2_Write
+			I2C2_Wait_For_Idle
+		TW_Wr
+			I2C2_Start
+				I2C2_Wait_For_Idle
+			I2C2_Write
+			I2C2_Stop
+				I2C2_Wait_For_Idle
+	TW_Wr
